@@ -1,0 +1,7 @@
+[
+   {
+      "directory" : "/home/rekt/workspace_ccstheia/simon-says-msp430/Debug",
+      "command"   : "clang++ -I\"/opt/ccstudio/ccs/ccs_base/msp430/include\" -I\"/home/rekt/workspace_ccstheia/simon-says-msp430\" -I\"/opt/ccstudio/ccs/tools/compiler/ti-cgt-msp430_21.6.1.LTS/include\" -D__MSP430G2553__",
+      "file"      : "/home/rekt/workspace_ccstheia/simon-says-msp430/main.asm"
+   }
+]
