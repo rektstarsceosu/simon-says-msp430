@@ -68,6 +68,7 @@
 ;   Built with Code Composer Essentials Version: 4.2.0
 ;*******************************************************************************
  .cdecls C,LIST,  "msp430.h"
+
 ;-------------------------------------------------------------------------------
             .def    RESET                   ; Export program entry-point to
                                             ; make it known to linker.
@@ -77,10 +78,90 @@
 RESET       mov.w   #0280h,SP               ; Initialize stackpointer
 StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT
 
+SETUP:
+    bis.b #BUTALL, &P1REN ; enable buttons
+    bis.b #BUTALL, &P1OUT 
+    bis.b #LEDALL, &P2DIR   ; set leds as output
+    bic.b #LEDALL, &P2OUT   ; Ensure all are OFF initially
 
 ;------------------------------------------------------------------------------
 ;           MAIN LOOP
 ;------------------------------------------------------------------------------
+wait:
+    inc r12 ; seed 
+    bit.b #00001000b,&P1IN
+    jnz wait
+
+MAINLOOP:
+    call #GEN_RANDOM ; create random array
+
+userin:
+    jmp userin
+    jmp MAINLOOP
+
+GEN_RANDOM:
+; --- PRNG Step (Seed in R12) ---
+    mov.w &LEVEL, r10
+    mov.w #ORDER, r11
+    inc.w r11
+.GEN_RANDOM_LOOP:
+; 1. Standard LFSR Step 
+    bit.w   #1, r12
+    clrc
+    rrc.w   r12
+    jnc     .NO_XOR
+    xor.w   #0xB400, r12
+.NO_XOR:
+    mov r12, r13 ; mask bits
+    and.w #0x0003,r13
+    mov.b  r13, 0(r11)
+    ; show the generated lights
+    bis.b BITTABLE(r13), &P2OUT
+    call #DELAY
+    bic.b #LEDALL, &P2OUT  ; turn off
+
+    inc.w   r11
+    dec.w   r10
+    jnz .GEN_RANDOM_LOOP
+.DONE:
+    inc.w &LEVEL                ; increnent level
+    ret                         ; Return to caller
+    
+DELAY: 
+    push r5
+    xor.w r5,r5
+.DELAY_LOOP:
+    nop
+    nop
+    nop
+    dec r5
+    jnz .DELAY_LOOP
+    pop r5
+    ret
+;------------------------------------------------------------------------------
+;           data
+;------------------------------------------------------------------------------
+.data
+LEVEL:
+    .word 5
+ORDER:
+    .space 32 
+
+; DEFINE LED CONSTANTS 
+LED0    .equ    0x0001
+LED1    .equ    0x0002
+LED2    .equ    0x0004
+LED3    .equ    0x0008
+LEDALL  .equ    0x000f
+; DEFINE BUTTON CONSTANTS
+BUT0    .equ    0x0001
+BUT1    .equ    0x0002
+BUT2    .equ    0x0008
+BUT3    .equ    0x0010
+BUTONB  .equ    0x0004
+BUTALL  .equ    0x001f
+
+BITTABLE: .word 0x0102,0x0408 ; convert table for leds
 
 ;------------------------------------------------------------------------------
 ;           Interrupt Vectors
