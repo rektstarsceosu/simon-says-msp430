@@ -1,0 +1,6 @@
+# ignore the binaries
+Debug/
+Release/
+*.obj
+*.out
+*.map
