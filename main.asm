@@ -1,4 +1,3 @@
-
 ;*******************************************************************************
  .cdecls C,LIST,  "msp430.h"
 
@@ -34,7 +33,16 @@ wait:
     jnz wait
 
 MAINLOOP:
+    cmp.w #2, &LEVEL
+    jnz .lvl_ok
+    mov.w #1, &LEVEL
     call #GEN_RANDOM ; create random array
+    mov.w #2, &LEVEL
+    call #GEN_RANDOM ; create random array
+    jmp .after_gen
+.lvl_ok:
+    call #GEN_RANDOM ; create random array
+.after_gen:
     call #SHOW_LEVEL 
     mov.b #PLAYER_TURN, &STATE ; set game state
     mov.w #0, r11 ; set players progression
@@ -49,13 +57,15 @@ PLAYER_TURN_STATE:
     jz LOSE_STATE ; player failed the level
  
 EGG_STATE:
-    push r12 ; corrupt stack >w<
-    ret
+    jmp wait
 
 LOSE_STATE:
     ; do smth
     bic.w #GIE, SR ; disable interrupts
-    jmp LOSE_STATE
+    mov.w #PLAYER_TURN, &STATE
+    mov.w #2, &LEVEL
+    mov.w #0, r11
+    jmp wait
 
 WIN_STATE:
     inc.w &LEVEL ; increnent level
@@ -68,14 +78,14 @@ SHOW_LEVEL:
     mov.w &LEVEL, r5
    
 .SHOW_LEVEL_loop:
-    mov.w @r11+, r13 ; get current and increment pointer
+    mov.b @r11+, r13 ; get current and increment pointer
     ; show the generated lights
     bis.b BITLEDTABLE(r13), &P2OUT
     call #DELAY
     bic.b #LEDALL, &P2OUT  ; turn off
 
     dec r5
-    jge .SHOW_LEVEL_loop ; return if -1 (flowed) not negative
+    jnz .SHOW_LEVEL_loop ; return if -1 (flowed) not negative
     ret
 
 GEN_RANDOM:
@@ -91,7 +101,8 @@ GEN_RANDOM:
 ; save the value 
     mov r12, r13 ; mask bits
     and.w #0x0003,r13
-    mov.w r13,ORDER(r11)
+    dec.w r11
+    mov.b r13,ORDER(r11)
     ret                         ; Return to caller
     
 SHR: ; r12 >>= r5
@@ -119,8 +130,10 @@ DELAY:
 
 ; BUTTON ISR
 p1_ISR: ; r11 = progression (current led/button/whatever) points to ORDER+index
-    bic.b #0xff, &P1IFG ; clear IF for next interrupt
-    mov.b &P1IN,r5 ; current button
+    mov.b &P1IFG, r5
+    and.b #BUTGAME, r5
+    bic.b #BUTGAME, &P1IFG ; clear IF for next interrupt
+
     mov.b ORDER(r11),r6
     mov.b BITBUTTABLE(r6),r6 ; needed button
 
@@ -128,7 +141,9 @@ p1_ISR: ; r11 = progression (current led/button/whatever) points to ORDER+index
     jnz .isr_false
 .isr_correct
     
-    cmp.w &LEVEL,r11
+    mov.w &LEVEL, r7
+    dec.w r7
+    cmp.w r7, r11
     jnz .isr_done
 .isr_correct_win
     mov.w #WIN,&STATE
@@ -150,7 +165,7 @@ p1_ISR: ; r11 = progression (current led/button/whatever) points to ORDER+index
 STATE:
     .word 0
 LEVEL:
-    .word 0
+    .word 2
 ORDER:
     .space 32
 
@@ -174,8 +189,8 @@ WIN             .equ    1
 LOSE            .equ    2
 EGG             .equ    3
 
-BITLEDTABLE: .word 0x0102,0x0408 ; convert table for led: int to pin
-BITBUTTABLE: .word 0x0102,0x0810 ; convert table for buttons: int to pin
+BITLEDTABLE: .byte 0x01,0x02,0x04,0x08 ; convert table for led: int to pin
+BITBUTTABLE: .byte 0x01,0x02,0x08,0x10 ; convert table for buttons: int to pin
 
 ;-------------------------------------------------------------------------------
 ; Stack Pointer definition
@@ -192,4 +207,3 @@ BITBUTTABLE: .word 0x0102,0x0810 ; convert table for buttons: int to pin
             .sect   ".reset"                ; MSP430 RESET Vector
             .short  RESET                   ;        
             .end
-
