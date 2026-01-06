@@ -5,8 +5,13 @@
 ;-------------------------------------------------------------------------------
             .def    RESET                   ; Export program entry-point to
                                             ; make it known to linker.
+
 ;------------------------------------------------------------------------------
-            .text                           ; Program Start
+            .text                           ; Assemble into program memory.
+            .retain                         ; Override ELF conditional linking
+                                            ; and retain current section.
+            .retainrefs                     ; And retain any sections that have
+                                            ; references to current section.
 ;------------------------------------------------------------------------------
 RESET       mov.w   #0280h,SP               ; Initialize stackpointer
 StopWDT     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT
@@ -22,51 +27,55 @@ SETUP:
     bis.b #BUTGAME, &P1IES ; buttons interrupts from H to L
     bic.b #0xFF, &P1IFG ; clear interrrupts
     bis.b #BUTGAME, &P1IE  ; enable button interrupts
+    mov.w #-1,&STATE
 
 ;------------------------------------------------------------------------------
 ;           MAIN LOOP
 ;------------------------------------------------------------------------------
 wait:
     mov.w #ORDER, r10
-    inc r12 ; seed 
-    bit.b #00001000b,&P1IN
-    
+    inc r12 ; seed
+	bis.b #LEDALL,&P2OUT
+	call #DELAY
+	bic.b #LEDALL,&P2OUT
+	bit.b #BUTONB, &P1IN
     jnz wait
 
 MAINLOOP:
+	call #DELAY
     call #GEN_RANDOM ; create random array
-    call #SHOW_LEVEL 
-    mov.b #PLAYER_TURN, &STATE ; set game state
+    call #SHOW_LEVEL
+    mov.w #PLAYER_TURN, &STATE ; set game state
     mov.w #0, r11 ; set players progression
 PLAYER_TURN_STATE:
     cmp #PLAYER_TURN, &STATE
     jz PLAYER_TURN_STATE ; player still playing
-    
-    cmp #WIN, &STATE 
+
+    cmp #WIN, &STATE
     jz WIN_STATE ; player passed the level
 
-    cmp #LOSE, &STATE 
+    cmp #LOSE, &STATE
     jz LOSE_STATE ; player failed the level
- 
+
 EGG_STATE:
     push r12 ; corrupt stack >w<
     ret
 
 LOSE_STATE:
     ; do smth
-    bic.w #GIE, SR ; disable interrupts
-    jmp LOSE_STATE
+
+    jmp RESET
 
 WIN_STATE:
     inc.w &LEVEL ; increnent level
-    jmp MAINLOOP ; continue 
+    jmp MAINLOOP ; continue
 
 ; functions
 
 SHOW_LEVEL:
     mov.w #ORDER, r11
     mov.w &LEVEL, r5
-   
+
 .SHOW_LEVEL_loop:
     mov.w @r11+, r13 ; get current and increment pointer
     ; show the generated lights
@@ -87,29 +96,32 @@ GEN_RANDOM:
     mov.w #9, r5
     call #SHL
     mov.w #8, r5
-    call #SHR    
-; save the value 
+    call #SHR
+; save the value
     mov r12, r13 ; mask bits
     and.w #0x0003,r13
     mov.w r13,ORDER(r11)
     ret                         ; Return to caller
-    
+
 SHR: ; r12 >>= r5
     rra.w r12
     dec.w r5
     jnz SHR
-    ret 
+    ret
 SHL: ; r12 <<= r5
     rla.w r12
     dec.w r5
     jnz SHL
     ret
 
-DELAY: 
+DELAY:
     push r5
     xor.w r5,r5
 .DELAY_LOOP:
-    nop
+	cmp #-1,&STATE
+	jnz .delay_noseed
+	inc r12
+.delay_noseed:
     nop
     nop
     dec r5
@@ -120,14 +132,15 @@ DELAY:
 ; BUTTON ISR
 p1_ISR: ; r11 = progression (current led/button/whatever) points to ORDER+index
     bic.b #0xff, &P1IFG ; clear IF for next interrupt
-    mov.b &P1IN,r5 ; current button
-    mov.b ORDER(r11),r6
-    mov.b BITBUTTABLE(r6),r6 ; needed button
+    bit.b #BUTONB,&P1IN
+    jnz .isr_done
 
-    cmp.b r6,r5 ; compare
+    mov.b ORDER(r11),r6
+    cmp.b BITBUTTABLE(r6), &P1IN ; needed button
+
     jnz .isr_false
 .isr_correct
-    
+
     cmp.w &LEVEL,r11
     jnz .isr_done
 .isr_correct_win
@@ -145,16 +158,19 @@ p1_ISR: ; r11 = progression (current led/button/whatever) points to ORDER+index
 ;------------------------------------------------------------------------------
 ;           data
 ;------------------------------------------------------------------------------
-    
-.data
+
+	.data
+BITLEDTABLE: .word 0x0102,0x0408 ; convert table for led: int to pin
+BITBUTTABLE: .word 0x0102,0x0810 ; convert table for buttons: int to pin
+
 STATE:
-    .word 0
+    .word -1
 LEVEL:
     .word 0
 ORDER:
     .space 32
 
-; DEFINE LED CONSTANTS 
+; DEFINE LED CONSTANTS
 LED0    .equ    0x0001
 LED1    .equ    0x0002
 LED2    .equ    0x0004
@@ -163,10 +179,10 @@ LEDALL  .equ    0x000f
 ; DEFINE BUTTON CONSTANTS
 BUT0    .equ    0x0001
 BUT1    .equ    0x0002
-BUT2    .equ    0x0008
+BUT2    .equ    0x0004
 BUT3    .equ    0x0010
-BUTONB  .equ    0x0004
-BUTALL  .equ    0x001f
+BUTONB  .equ    0x0008
+BUTALL  .equ    0x0017
 BUTGAME .equ    0x001b
 ; DEFINE GAME STATES
 PLAYER_TURN     .equ    0
@@ -174,8 +190,7 @@ WIN             .equ    1
 LOSE            .equ    2
 EGG             .equ    3
 
-BITLEDTABLE: .word 0x0102,0x0408 ; convert table for led: int to pin
-BITBUTTABLE: .word 0x0102,0x0810 ; convert table for buttons: int to pin
+
 
 ;-------------------------------------------------------------------------------
 ; Stack Pointer definition
@@ -190,6 +205,6 @@ BITBUTTABLE: .word 0x0102,0x0810 ; convert table for buttons: int to pin
             .sect ".int02" ; Port 1 interrupt vector
             .short p1_ISR
             .sect   ".reset"                ; MSP430 RESET Vector
-            .short  RESET                   ;        
+            .short  RESET                   ;
             .end
 
