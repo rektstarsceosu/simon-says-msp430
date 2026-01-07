@@ -43,12 +43,6 @@ Pin definitions can be changed easily from the constant section in the source co
 
 ## TODO
 
-- Implement an actual easter egg  
-  (the structure exists, but it currently does nothing)
-
-- Properly test the game  
-  The code is still largely untested and may contain bugs
-
 - If there is enough time, try to implement the 3rd extra point:  
   - make the game faster as levels increase  
   - add a time limit for player input
