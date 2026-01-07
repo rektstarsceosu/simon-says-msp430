@@ -1,6 +1,4 @@
-
-;*******************************************************************************    
-            .cdecls C,LIST,  "msp430.h"
+;******************************************************************************* .cdecls C,LIST,  "msp430.h"
 
 ;-------------------------------------------------------------------------------
             .def    RESET                   ; Export program entry-point to
@@ -34,16 +32,62 @@ SETUP:
 
     mov.w #0,&LEVEL
     mov.w #-1,&STATE
+    mov.w #0xFFFF, &SPEED_DELAY ; Varsayılan hız (Yavaş)
+
 ;------------------------------------------------------------------------------
-;           MAIN LOOP
+;           MAIN LOOP (BEKLEME EKRANI)
 ;------------------------------------------------------------------------------
 wait:
     xor.b #LEDALL,&P2OUT
-    call #DELAY
+    
+    ; Wait döngüsünde sabit bir yavaş hız kullanalım
+    push r5
+    mov.w #0xFFFF, r5
+.wait_delay:
+    dec.w r5
+    jnz .wait_delay
+    pop r5
 
-    bit.b #BUT3,&P1IN
-    jnz wait
+    ; --- EASTER EGG KONTROLÜ ---
+    bit.b #BUT0, &P1IN      ; BUT0 (P1.0) basılı mı?
+    jz DO_EASTER_EGG        ; Basılıysa (0 ise) sürprize git
 
+    bit.b #BUT3,&P1IN       ; Oyun başlatma tuşu (BUT3) basılı mı?
+    jnz wait                ; Basılı değilse beklemeye devam et
+
+    jmp MAINLOOP            ; Basıldıysa oyunu başlat
+
+;------------------------------------------------------------------------------
+;           EASTER EGG (GİZLİ KARA ŞİMŞEK MODU)
+;------------------------------------------------------------------------------
+DO_EASTER_EGG:
+    bic.b #LEDALL, &P2OUT   ; LED'leri temizle
+    mov.w #4, r14           ; Animasyonu 4 kez tekrarla
+
+.egg_loop:
+    ; LED0 -> LED1 -> LED2 -> LED3 -> LED2 -> LED1 sırası
+    mov.b #LED0, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED1, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED2, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED3, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED2, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED1, &P2OUT
+    call #DELAY_FAST
+    
+    dec.w r14
+    jnz .egg_loop           ; Döngü bitmediyse devam et
+
+    bic.b #LEDALL, &P2OUT   ; Temizle
+    jmp wait                ; Bekleme ekranına geri dön
+
+;------------------------------------------------------------------------------
+;           OYUN DÖNGÜSÜ
+;------------------------------------------------------------------------------
 MAINLOOP:
     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT
     bic.b   #WDTIE, &IE1
@@ -53,10 +97,40 @@ MAINLOOP:
     mov.w #0,&LEVEL
 
 START_LEVEL:
+    ; --- ZORLUK SEVİYESİ AYARLAMA (MULTI-TIER DIFFICULTY) ---
+    ; Level değerine göre SPEED_DELAY değişkenini güncelliyoruz.
+    
+    cmp.w #4, &LEVEL        ; Level 4'ten küçük mü?
+    jlo .set_easy           ; Evetse -> EASY
+
+    cmp.w #8, &LEVEL        ; Level 8'den küçük mü?
+    jlo .set_medium         ; Evetse -> MEDIUM
+
+    cmp.w #12, &LEVEL       ; Level 12'den küçük mü?
+    jlo .set_hard           ; Evetse -> HARD
+
+    jmp .set_nightmare      ; Değilse (Level >= 12) -> NIGHTMARE
+
+.set_easy:
+    mov.w #0xFFFF, &SPEED_DELAY ; En yavaş hız
+    jmp .diff_done
+
+.set_medium:
+    mov.w #0x8000, &SPEED_DELAY ; Orta hız (Easy'nin 2 katı)
+    jmp .diff_done
+
+.set_hard:
+    mov.w #0x4000, &SPEED_DELAY ; Hızlı (Medium'un 2 katı)
+    jmp .diff_done
+
+.set_nightmare:
+    mov.w #0x2500, &SPEED_DELAY ; Çok hızlı (Hard'dan hızlı)
+
+.diff_done:
+    ; --- ZORLUK AYARI BİTTİ ---
+
     mov.w #0, &PROG ; set players progression
-
     call #SHOW_LEVEL
-
     mov.w #PLAYER_TURN, &STATE ; set game state
 
 
@@ -85,7 +159,7 @@ WIN_STATE:
     rra.b &P2OUT
 .WIN_STATE_loop:
     rra.b &P2OUT
-    call #DELAY
+    call #DELAY         ; Burada da hızlanan delay'i kullanır
     dec.w r5
     jnz .WIN_STATE_loop
     bic.b #LEDALL, &P2OUT ; done
@@ -108,8 +182,8 @@ SHOW_LEVEL:
     bis.b r6, &P2OUT
 
     inc.w r11
-    call #DELAY
-    bic.b #LEDALL, &P2OUT ; turn of leds
+    call #DELAY             ; <--- Dinamik hız burada devreye girer
+    bic.b #LEDALL, &P2OUT   ; turn of leds
     call #DELAY
 
     add.w #-1, r5
@@ -128,7 +202,7 @@ GEN_RANDOM:
     push r5
     push r13
 
-    mov.w &SEED, r12       ; Load seed from memory
+    mov.w &SEED, r12        ; Load seed from memory
     mov.w #ORDER,r11
     add.w &LEVEL,r11
 
@@ -149,19 +223,20 @@ GEN_RANDOM:
     xor.w r13, r12        ; seed ^= (seed >> 8)
 
     mov.w r12,r6
+    and.w #0x03,r6
     call #INT2PIN
     mov.b r6,0(r11)
     inc.w r11
     cmp.w #ORDER+64,r11
     jne .GEN_RANDOM_loop
 
-    mov.w r12, &SEED       ; Save evolved seed back to memory
+    mov.w r12, &SEED        ; Save evolved seed back to memory
     pop r13
     pop r5
     pop r12
     pop r11
     pop r6
-    ret                         ; Return to caller
+    ret                             ; Return to caller
 
 SHR:
     rra.w r13
@@ -173,9 +248,10 @@ SHL:
     dec.w r5
     jnz SHL
     ret
+    
 INT2PIN: ; r6 => r6
-    and.w #00000011b,r6
-    rla.w r6
+    and.w #0x03,r6
+    rla.w r6            ; (DÜZELTME)
     add.w r6,pc
     jmp .case1
     jmp .case2
@@ -194,10 +270,12 @@ INT2PIN: ; r6 => r6
     mov.w #BUT3,r6
     ret
 
-
+;------------------------------------------------------------------------------
+; DINAMIK DELAY FONKSIYONU
+;------------------------------------------------------------------------------
 DELAY:
     push r5
-    xor.w r5,r5
+    mov.w &SPEED_DELAY, r5  ; Sabit 0 yerine, belirlenen hızı yükle
 .DELAY_LOOP:
     nop
     nop
@@ -205,6 +283,18 @@ DELAY:
     jnz .DELAY_LOOP
     pop r5
     ret
+
+; Easter egg için sabit hızlı gecikme
+DELAY_FAST:
+    push r5
+    mov.w #03000h, r5
+.FAST_LOOP:
+    nop
+    dec.w r5
+    jnz .FAST_LOOP
+    pop r5
+    ret
+
 ; watchdog isr
 wdt_ISR:
     inc.w &SEED
@@ -273,6 +363,8 @@ PROG:
 SEED:
     .word 0xACE1 ; storage for randomness
     .byte 0xff
+SPEED_DELAY:        ; <--- YENİ DEĞİŞKEN (HIZ KONTROLÜ İÇİN)
+    .word 0xFFFF    ; Başlangıç değeri
 ORDER:
     .space 128
 
@@ -294,7 +386,6 @@ PLAYER_TURN     .equ    0
 WIN             .equ    1
 LOSE            .equ    2
 EGG             .equ    3
-
 
 
 ;-------------------------------------------------------------------------------
