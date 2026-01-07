@@ -107,7 +107,7 @@ SHOW_LEVEL:
     ;call #INT2PIN
     bis.b r6, &P2OUT    
 
-    add.w #2 r11
+    add.w #2, r11
     call #DELAY
     bic.b #LEDALL, &P2OUT ; turn of leds
     call #DELAY
@@ -154,7 +154,7 @@ GEN_RANDOM:
     and.w #0x03,r6
     call #INT2PIN
     mov.w r6,0(r11)
-    add.w @2, r11
+    add.w #2, r11
     cmp.w #ORDER+64,r11
     jne .GEN_RANDOM_loop
 
@@ -205,7 +205,8 @@ DELAY:
     nop
     dec r5
     jnz .DELAY_LOOP
-    pop r5    ret
+    pop r5   
+    ret
 ; watchdog isr
 wdt_ISR:
     inc.w &SEED           
@@ -221,7 +222,7 @@ p1_ISR: ;
     jeq .isr_done ; game has not started 
 
     mov.w &PROG,r11
-    add,w r11,r11 
+    add.w r11,r11 
     add.w &ORDER,r11
     mov.w 0(r11),r6 ; get choice from order array
 
@@ -255,7 +256,6 @@ p1_ISR: ;
     pop r6
     pop r5
     bic.b #0xff, &P1IFG ; clear IF for next interrupt
-
     reti
 ;------------------------------------------------------------------------------
 ;           data
@@ -273,8 +273,7 @@ LEVEL:
 PROG:
     .word 0
 SEED:
-    .word 0xACE1 ; storage for randomness
-    .byte 0xff
+    .word 0xba11 ; storage for randomness
 ORDER:
     .space 128
 
