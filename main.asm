@@ -176,6 +176,7 @@ SHL: ; r12 <<= r5
     dec.w r5
     jnz SHL
     ret
+
 INT2PIN: ; r6 => r6
     and.w #0x03,r6
     add.w r6,pc
@@ -207,6 +208,7 @@ DELAY:
     jnz .DELAY_LOOP
     pop r5
     ret
+
 ; watchdog isr
 wdt_ISR:
     inc.w &SEED           
@@ -225,7 +227,6 @@ p1_ISR: ;
     add.w &ORDER,r11
     mov.b 0(r11),r6 ; get choice from order array
     
-    call #INT2PIN
     bit.b r6, &P1IN ; check button
     jnz .isr_false
 
@@ -255,7 +256,7 @@ p1_ISR: ;
     pop r11
     pop r6
     pop r5
-    bic.b #0xff, &P1IFG ; clear IF for next interrupt
+    
 
     reti
 ;------------------------------------------------------------------------------
