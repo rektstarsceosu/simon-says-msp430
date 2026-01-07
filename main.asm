@@ -1,5 +1,6 @@
-;*******************************************************************************
- .cdecls C,LIST,  "msp430.h"
+
+;*******************************************************************************    
+            .cdecls C,LIST,  "msp430.h"
 
 ;-------------------------------------------------------------------------------
             .def    RESET                   ; Export program entry-point to
@@ -12,14 +13,14 @@
             .retainrefs                     ; And retain any sections that have
                                             ; references to current section.
 ;------------------------------------------------------------------------------
-RESET:    
+RESET:
     mov.w   #0280h,SP               ; Initialize stackpointer
 
 SETUP:
     mov.w   #WDTPW+WDTTMSEL+WDTCNTCL+WDTIS0+WDTIS1, &WDTCTL ; start watchdog
     bis.b   #WDTIE, &IE1
 
-    bic.b #0xff,&P1DIR ; set buttons in 
+    bic.b #0xff,&P1DIR ; set buttons in
     bis.b #0xff, &P1REN ; enable buttons resistors for stop floating
     bis.b #0xff, &P1OUT ; button presses h -> l, pull up all of them
     bis.b #BUTGAME, &P1IES ; buttons interrupts from H to L
@@ -53,7 +54,7 @@ MAINLOOP:
 
 START_LEVEL:
     mov.w #0, &PROG ; set players progression
-    
+
     call #SHOW_LEVEL
 
     mov.w #PLAYER_TURN, &STATE ; set game state
@@ -98,23 +99,22 @@ WIN_STATE:
 SHOW_LEVEL:
     push r11
     push r5
-    push r6 
+    push r6
 
     mov.w #ORDER, r11
     mov.w &LEVEL,r5
 .SHOW_LEVEL_loop:
     mov.b 0(r11),r6
-    ;call #INT2PIN
-    bis.b r6, &P2OUT    
+    bis.b r6, &P2OUT
 
     inc.w r11
     call #DELAY
     bic.b #LEDALL, &P2OUT ; turn of leds
     call #DELAY
-    
+
     add.w #-1, r5
     cmp.w #-1,r5
-    jne .SHOW_LEVEL_loop ; return if -1 
+    jne .SHOW_LEVEL_loop ; return if -1
 
     pop r6
     pop r5
@@ -127,14 +127,12 @@ GEN_RANDOM:
     push r12
     push r5
     push r13
-    
-; --- (Seed in RAM) ---
+
     mov.w &SEED, r12       ; Load seed from memory
     mov.w #ORDER,r11
     add.w &LEVEL,r11
 
 .GEN_RANDOM_loop:
-; xorshift798
     mov.w r12, r13        ; copy seed to r13
     mov.w #7, r5
     call #SHR            ; r13 = seed >> 7
@@ -149,7 +147,7 @@ GEN_RANDOM:
     mov.w #8, r5
     call #SHR            ; r13 = seed >> 8
     xor.w r13, r12        ; seed ^= (seed >> 8)
-; save the value
+
     mov.w r12,r6
     and.w #0x03,r6
     call #INT2PIN
@@ -166,17 +164,16 @@ GEN_RANDOM:
     pop r6
     ret                         ; Return to caller
 
-SHR: ; r12 >>= r5
-    rra.w r12
+SHR:
+    rra.w r13
     dec.w r5
     jnz SHR
     ret
-SHL: ; r12 <<= r5
-    rla.w r12
+SHL:
+    rla.w r13
     dec.w r5
     jnz SHL
     ret
-
 INT2PIN: ; r6 => r6
     and.w #0x03,r6
     add.w r6,pc
@@ -185,16 +182,16 @@ INT2PIN: ; r6 => r6
     jmp .case3
     jmp .case4
 .case1:
-    mov.w #BUT0,r6 
+    mov.w #BUT0,r6
     ret
 .case2:
-    mov.w #BUT1,r6 
+    mov.w #BUT1,r6
     ret
 .case3:
-    mov.w #BUT2,r6 
+    mov.w #BUT2,r6
     ret
 .case4:
-    mov.w #BUT3,r6 
+    mov.w #BUT3,r6
     ret
 
 
@@ -208,10 +205,9 @@ DELAY:
     jnz .DELAY_LOOP
     pop r5
     ret
-
 ; watchdog isr
 wdt_ISR:
-    inc.w &SEED           
+    inc.w &SEED
     reti
 ; BUTTON ISR
 
@@ -221,12 +217,12 @@ p1_ISR: ;
     push r11
 
     cmp.w #-1,&STATE
-    jeq .isr_done ; game has not started 
+    jeq .isr_done ; game has not started
 
     mov.w &PROG,r11
-    add.w &ORDER,r11
+    add.w #ORDER,r11
     mov.b 0(r11),r6 ; get choice from order array
-    
+
     bit.b r6, &P1IN ; check button
     jnz .isr_false
 
@@ -256,7 +252,7 @@ p1_ISR: ;
     pop r11
     pop r6
     pop r5
-    
+    bic.b #0xff, &P1IFG ; clear IF for next interrupt
 
     reti
 ;------------------------------------------------------------------------------
