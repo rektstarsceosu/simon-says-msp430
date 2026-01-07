@@ -1,6 +1,4 @@
-
-;*******************************************************************************    
-            .cdecls C,LIST,  "msp430.h"
+;******************************************************************************* .cdecls C,LIST,  "msp430.h"
 
 ;-------------------------------------------------------------------------------
             .def    RESET                   ; Export program entry-point to
@@ -35,15 +33,52 @@ SETUP:
     mov.w #0,&LEVEL
     mov.w #-1,&STATE
 ;------------------------------------------------------------------------------
-;           MAIN LOOP
+;           MAIN LOOP (BEKLEME EKRANI)
 ;------------------------------------------------------------------------------
 wait:
     xor.b #LEDALL,&P2OUT
     call #DELAY
 
-    bit.b #BUT3,&P1IN
-    jnz wait
+    ; --- EASTER EGG KONTROLÜ ---
+    bit.b #BUT0, &P1IN      ; BUT0 (P1.0) basılı mı?
+    jz DO_EASTER_EGG        ; Basılıysa (0 ise) sürprize git
 
+    bit.b #BUT3,&P1IN       ; Oyun başlatma tuşu (BUT3) basılı mı?
+    jnz wait                ; Basılı değilse beklemeye devam et
+
+    jmp MAINLOOP            ; Basıldıysa oyunu başlat
+
+;------------------------------------------------------------------------------
+;           EASTER EGG (GİZLİ KARA ŞİMŞEK MODU)
+;------------------------------------------------------------------------------
+DO_EASTER_EGG:
+    bic.b #LEDALL, &P2OUT   ; LED'leri temizle
+    mov.w #4, r14           ; Animasyonu 4 kez tekrarla
+
+.egg_loop:
+    ; LED0 -> LED1 -> LED2 -> LED3 -> LED2 -> LED1 sırası
+    mov.b #LED0, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED1, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED2, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED3, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED2, &P2OUT
+    call #DELAY_FAST
+    mov.b #LED1, &P2OUT
+    call #DELAY_FAST
+    
+    dec.w r14
+    jnz .egg_loop           ; Döngü bitmediyse devam et
+
+    bic.b #LEDALL, &P2OUT   ; Temizle
+    jmp wait                ; Bekleme ekranına geri dön
+
+;------------------------------------------------------------------------------
+;           OYUN DÖNGÜSÜ
+;------------------------------------------------------------------------------
 MAINLOOP:
     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT
     bic.b   #WDTIE, &IE1
@@ -128,7 +163,7 @@ GEN_RANDOM:
     push r5
     push r13
 
-    mov.w &SEED, r12       ; Load seed from memory
+    mov.w &SEED, r12        ; Load seed from memory
     mov.w #ORDER,r11
     add.w &LEVEL,r11
 
@@ -149,19 +184,20 @@ GEN_RANDOM:
     xor.w r13, r12        ; seed ^= (seed >> 8)
 
     mov.w r12,r6
+    and.w #0x03,r6
     call #INT2PIN
     mov.b r6,0(r11)
     inc.w r11
     cmp.w #ORDER+64,r11
     jne .GEN_RANDOM_loop
 
-    mov.w r12, &SEED       ; Save evolved seed back to memory
+    mov.w r12, &SEED        ; Save evolved seed back to memory
     pop r13
     pop r5
     pop r12
     pop r11
     pop r6
-    ret                         ; Return to caller
+    ret                             ; Return to caller
 
 SHR:
     rra.w r13
@@ -173,9 +209,10 @@ SHL:
     dec.w r5
     jnz SHL
     ret
+    
 INT2PIN: ; r6 => r6
-    and.w #00000011b,r6
-    rla.w r6
+    and.w #0x03,r6
+    rla.w r6            ; <--- DÜZELTME BURADA YAPILDI
     add.w r6,pc
     jmp .case1
     jmp .case2
@@ -205,6 +242,18 @@ DELAY:
     jnz .DELAY_LOOP
     pop r5
     ret
+
+; Easter egg için daha hızlı gecikme fonksiyonu
+DELAY_FAST:
+    push r5
+    mov.w #03000h, r5
+.FAST_LOOP:
+    nop
+    dec.w r5
+    jnz .FAST_LOOP
+    pop r5
+    ret
+
 ; watchdog isr
 wdt_ISR:
     inc.w &SEED
