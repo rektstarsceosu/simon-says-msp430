@@ -149,7 +149,6 @@ GEN_RANDOM:
     xor.w r13, r12        ; seed ^= (seed >> 8)
 
     mov.w r12,r6
-    and.w #0x03,r6
     call #INT2PIN
     mov.b r6,0(r11)
     inc.w r11
@@ -175,7 +174,8 @@ SHL:
     jnz SHL
     ret
 INT2PIN: ; r6 => r6
-    and.w #0x03,r6
+    and.w #00000011b,r6
+    rla.w r6
     add.w r6,pc
     jmp .case1
     jmp .case2
