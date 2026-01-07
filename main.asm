@@ -103,11 +103,11 @@ SHOW_LEVEL:
     mov.w #ORDER, r11
     mov.w &LEVEL,r5
 .SHOW_LEVEL_loop:
-    mov.b 0(r11),r6
+    mov.w 0(r11),r6
     ;call #INT2PIN
     bis.b r6, &P2OUT    
 
-    inc.w r11
+    add.w #2 r11
     call #DELAY
     bic.b #LEDALL, &P2OUT ; turn of leds
     call #DELAY
@@ -153,8 +153,8 @@ GEN_RANDOM:
     mov.w r12,r6
     and.w #0x03,r6
     call #INT2PIN
-    mov.b r6,0(r11)
-    inc.w r11
+    mov.w r6,0(r11)
+    add.w @2, r11
     cmp.w #ORDER+64,r11
     jne .GEN_RANDOM_loop
 
@@ -205,8 +205,7 @@ DELAY:
     nop
     dec r5
     jnz .DELAY_LOOP
-    pop r5
-    ret
+    pop r5    ret
 ; watchdog isr
 wdt_ISR:
     inc.w &SEED           
@@ -222,10 +221,10 @@ p1_ISR: ;
     jeq .isr_done ; game has not started 
 
     mov.w &PROG,r11
+    add,w r11,r11 
     add.w &ORDER,r11
-    mov.b 0(r11),r6 ; get choice from order array
-    
-    call #INT2PIN
+    mov.w 0(r11),r6 ; get choice from order array
+
     bit.b r6, &P1IN ; check button
     jnz .isr_false
 
