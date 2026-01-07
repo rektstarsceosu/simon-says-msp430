@@ -30,7 +30,7 @@ SETUP:
     bic.b #LEDALL, &P2OUT   ; Ensure all are OFF initially
 
     bic.b #0xff, &P1IFG ; clear interrrupts
-    bis.w #GIE, SR ; enable interrupts
+    bic.w #GIE, SR ; disable interrupts
 
     mov.w #0,&LEVEL
     mov.w #-1,&STATE
@@ -38,13 +38,17 @@ SETUP:
 ;           MAIN LOOP
 ;------------------------------------------------------------------------------
 wait:
-    xor.b #LEDALL,&P2OUT
     call #DELAY
-
+    xor.b #LEDALL,&P2OUT
+    bit.b #BUT0,&P1IN
+    jnz .wait_c
+    call #EGG_STATE
+.wait_c:
     bit.b #BUT3,&P1IN
     jnz wait
 
 MAINLOOP:
+    bis.w #GIE, SR ; enable interrupts
     mov.w   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT
     bic.b   #WDTIE, &IE1
 
@@ -71,13 +75,35 @@ PLAYER_TURN_STATE:
     jz LOSE_STATE ; player failed the level
 
 EGG_STATE:
-    push r12 ; corrupt stack >w<
-    ret
+    mov.w #SEQ,r11
+.EGG_STATE_LOOP:
+    call #DELAY
+    mov.w @r11,r12
+    mov.w #4,r5
+    call #SHR
+    bic.w #LEDALL, &P2OUT
+    bis.b r12, &P2OUT
+    call #DELAY
+    mov.w @r11,r12
+    and.w #0x0f,r12
+    bic.w #LEDALL, &P2OUT
+    bis.b r12, &P2OUT
+    inc.w r11
+    cmp.w #SEQ+8,r11
+    jne .EGG_STATE_LOOP
+
+    ;reset
+
+    mov.w   #0x0000, &WDTCTL
 
 LOSE_STATE:
     ; do smth
     ;reset
+
     mov.w   #0x0000, &WDTCTL
+
+    
+
 
 WIN_STATE:
     mov.w #4,r5
@@ -173,6 +199,7 @@ SHL:
     dec.w r5
     jnz SHL
     ret
+
 INT2PIN: ; r6 => r6
     and.w #00000011b,r6
     rla.w r6
@@ -245,7 +272,6 @@ p1_ISR: ;
     jmp .isr_done
 
 .isr_egg ; maybe ?
-    mov.w #EGG,&STATE
     jmp .isr_done
 .isr_done
 
@@ -273,6 +299,8 @@ PROG:
 SEED:
     .word 0xACE1 ; storage for randomness
     .byte 0xff
+SEQ: 
+    .byte 0x43, 0x41, 0x4e, 0x4b, 0x41, 0x59, 0x41, 0x00
 ORDER:
     .space 128
 
